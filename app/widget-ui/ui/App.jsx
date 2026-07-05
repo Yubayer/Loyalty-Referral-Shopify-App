@@ -46,7 +46,7 @@ function fmtDate(iso) {
     }
 }
 
-export function App({ initialData, bridgeRef }) {
+export function App({ initialData, bridgeRef, hostEl }) {
     console.log('[NBL] App() component function called. initialData present:', !!initialData);
     const [isOpen, setIsOpen] = useState(false);
     const [activeTab, setActiveTab] = useState('home');
@@ -99,7 +99,7 @@ export function App({ initialData, bridgeRef }) {
 
     const { provisioning, provisionNeeded, inFlight } = useCustomerProvision({ isLoggedIn, customer, appConfig });
     const refModal = useReferralModal({ isLoggedIn, customer, appConfig, provisioning: inFlight, provisionNeeded });
-    useApplyTheme(initialData.cssVars);
+    useApplyTheme(initialData.cssVars, hostEl);
 
     // ── Toast notifications (unseen transactions from since the customer's
     //    last visit) — derived client-side from `transactions` (already on
@@ -163,7 +163,10 @@ export function App({ initialData, bridgeRef }) {
         // CSS vars live update — dashboard customize panel color/position changes
         bridgeRef.setCssVars = function (vars) {
             if (!vars || typeof vars !== 'object') return;
-            var root = document.documentElement;
+            // document.documentElement age global page-e set hoto — eta
+            // shadow host-e set kora dorkar, nahole widget-er theme var
+            // bahirer page-e leak kore jabe.
+            var root = hostEl || document.documentElement;
             Object.keys(vars).forEach(function (k) {
                 if (k.indexOf('--') === 0) root.style.setProperty(k, vars[k]);
             });

@@ -78,7 +78,9 @@ export function ReferralModal({ refModal, pointRules, currencySymbol }) {
     return (
         <div class="nbl-refer-modal-overlay show" role="dialog" aria-modal="true" aria-labelledby="nbl-modal-title">
             <div class="nbl-refer-modal">
-                <div class="nbl-refer-modal__close" aria-label="Close" onClick={closeModal}>&times;</div>
+                <div class="nbl-refer-modal__close" aria-label="Close" onClick={closeModal}>
+                    <Icon name="close" px={16} />
+                </div>
                 <div class="nbl-refer-modal__content">
 
                     {step === 'login' && (

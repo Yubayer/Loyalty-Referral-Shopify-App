@@ -60,9 +60,9 @@ export const generateReferralDiscountCode = async (admin, customerId, referralCo
         // ==============================
         // 🔹 Generate discount code
         // ==============================
-        const randomCode = await generateDiscountCode() + "_REFERRAL";
+        const code = await generateDiscountCode();
 
-        const discountCodeInput = `${randomCode}_${referredEarningRule.discountType === "fixed"
+        const title = `${code}_REFERRAL_${referredEarningRule.discountType === "fixed"
             ? `$${referredEarningRule.discountValue}`
             : `${referredEarningRule.discountValue}%`
             }`;
@@ -121,8 +121,8 @@ export const generateReferralDiscountCode = async (admin, customerId, referralCo
             {
                 variables: {
                     basicCodeDiscount: {
-                        title: discountCodeInput,
-                        code: discountCodeInput,
+                        title: title,
+                        code: code,
                         startsAt: new Date().toISOString(),
                         endsAt: null,
                         customerSelection: {

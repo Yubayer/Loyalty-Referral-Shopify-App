@@ -12,7 +12,7 @@
 import { h } from 'preact';
 import { Icon } from './Icon.jsx';
 
-export function Image({ src, alt, size, placeholderIcon = 'reward-discount', viewable = false, onView }) {
+export function Image({ src, alt, size, placeholderIcon = 'reward-discount', viewable = true, onView }) {
     const sizeClass = size === 'sm' ? ' nbl-image--sm' : ' nbl-image--md';
     const classes = 'nbl-image' + sizeClass;
     const iconPx = size === 'sm' ? 16 : 24;

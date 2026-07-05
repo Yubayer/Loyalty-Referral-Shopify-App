@@ -24,7 +24,7 @@ input:not([type=checkbox], [type=radio]) {
    component. Component-level classes below reference
    these directly — no per-context duplicate tokens.
 ───────────────────────────────────────────────────── */
-:root {
+:host {
 
     /* ── Brand ── */
     --nbl-primary: #8b5cf6;
@@ -546,7 +546,8 @@ input:not([type=checkbox], [type=radio]) {
     width: 30px;
     height: 30px;
     border-radius: 50%;
-    background: rgba(255, 255, 255, 0.92);
+    background: transparent;
+    border: 1px solid;
     color: var(--nbl-text);
     display: flex;
     align-items: center;
@@ -557,7 +558,7 @@ input:not([type=checkbox], [type=radio]) {
 }
 
 .nbl-image-preview-panel__close:hover {
-    background: #fff;
+    /* background: #fff; */
     transform: scale(1.08);
 }
 
@@ -853,7 +854,7 @@ input:not([type=checkbox], [type=radio]) {
 .nbl-toast-stack {
     position: fixed;
     bottom: calc(var(--nbl-launcher-bottom) + 70px);
-    z-index: 1000000000;
+    z-index: 9999999999999999999999;
     display: flex;
     flex-direction: column-reverse;
     gap: 8px;
@@ -1121,6 +1122,7 @@ input:not([type=checkbox], [type=radio]) {
     transform-origin: var(--nbl-widget-origin, bottom left);
     transition: transform 0.45s var(--nbl-ease-spring), opacity 0.3s ease;
     box-shadow: var(--nbl-shadow);
+    overflow: hidden;
 }
 
 .nbl-widget-container.pos-left {
@@ -2827,6 +2829,7 @@ input:not([type=checkbox], [type=radio]) {
     gap: 8px;
     margin-bottom: 10px;
     padding-right: 28px;
+    flex-direction: column;
 }
 
 .nbl-notify-info__title-text {
@@ -2889,15 +2892,15 @@ input:not([type=checkbox], [type=radio]) {
 }
 
 .nbl-notify-info__row:last-child {
-    border-bottom: none;
+    /* border-bottom: none; */
 }
 
 .nbl-notify-info__row-key {
-    color: rgba(255, 255, 255, 0.6);
+    color: var(--nbl-text);
 }
 
 .nbl-notify-info__row-val {
-    color: #fff;
+    color: var(--nbl-text);
     font-weight: 500;
     text-align: right;
 }
@@ -2928,7 +2931,7 @@ input:not([type=checkbox], [type=radio]) {
 .nbl-notify-info__msg-icon {
     display: inline-flex;
     flex-shrink: 0;
-    margin-top: 1px;
+    margin-top: 2.5px;
 }
 
 .nbl-notify-info__msg-icon svg {
@@ -3094,16 +3097,25 @@ input:not([type=checkbox], [type=radio]) {
 
 .nbl-refer-modal__close {
     position: absolute;
-    top: 16px;
-    right: 18px;
+    top: 22px;
+    right: 20px;
     font-size: 26px;
     font-weight: 300;
     cursor: pointer;
-    color: var(--nbl-modal-muted-color);
     transition: color 0.2s, transform 0.2s;
     z-index: 10;
     line-height: 1;
     user-select: none;
+
+    width: 25px;
+    height: 25px;
+    background: #ffc543;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--nbl-modal-brand-color);
+    background: var(--nbl-modal-brand-bg);
+    border-radius: 50%;
 }
 
 .nbl-refer-modal__close:hover {
@@ -3121,12 +3133,12 @@ input:not([type=checkbox], [type=radio]) {
 
 .nbl-refer-modal__brand {
     display: inline-block;
-    font-size: 11px;
+    font-size: 15px;
     font-weight: 700;
     letter-spacing: 0.5px;
     color: var(--nbl-modal-brand-color);
     background: var(--nbl-modal-brand-bg);
-    padding: 4px 11px;
+    padding: 7px 14px;
     border-radius: var(--nbl-radius-full);
     margin-bottom: 12px;
 }
@@ -3137,6 +3149,9 @@ input:not([type=checkbox], [type=radio]) {
     font-weight: 700;
     color: var(--nbl-modal-title-color);
     line-height: 1.35;
+    display: flex;
+    align-items: center;
+    gap: 6px;
 }
 
 .nbl-refer-modal__title .nbl-icon svg {

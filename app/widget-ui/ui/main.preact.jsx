@@ -72,12 +72,26 @@ function boot() {
     var bridgeRef = {};
     window.NBL_v1.__bridge = bridgeRef;
 
-    var root = document.createElement('div');
-    document.body.appendChild(root);
+    // ── Shadow DOM host — bahirer theme CSS vitore ashbe na, ar amader
+    //    ui.css bahire leak korbe na. `host`-i ekmatro element jeta light
+    //    DOM-e thake; baki shob shadow tree-r vitore.
+    var host = document.createElement('div');
+    document.body.appendChild(host);
+    var shadowRoot = host.attachShadow({ mode: 'open' });
+
+    var styleEl = document.createElement('style');
+    // __NBL_CSS_TEXT__ — build.js-e esbuild `define` diye inject kora
+    // minified ui.css string (dekho build.js). :root ui.css-e :host-e
+    // convert kora hoyeche, karon :root shadow tree-r bhitor match kore na.
+    styleEl.textContent = __NBL_CSS_TEXT__;
+    shadowRoot.appendChild(styleEl);
+
+    var mountPoint = document.createElement('div');
+    shadowRoot.appendChild(mountPoint);
 
     try {
-        render(<App initialData={initialData} bridgeRef={bridgeRef} />, root);
-        console.log('[NBL] boot(): render() returned without throwing. root.innerHTML =', root.innerHTML);
+        render(<App initialData={initialData} bridgeRef={bridgeRef} hostEl={host} />, mountPoint);
+        console.log('[NBL] boot(): render() returned without throwing. mountPoint.innerHTML =', mountPoint.innerHTML);
     } catch (err) {
         console.error('[NBL] boot(): render() threw an exception:', err);
     }

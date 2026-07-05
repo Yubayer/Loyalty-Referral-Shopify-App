@@ -246,18 +246,18 @@ window.NBL_v1.appConfig = {
     physicalPrizes: [
         {
             id: 1,
-            title: "Test 2",
-            description: "test desc",
-            imageUrl: "https://cdn.shopify.com/s/files/1/0824/6349/0298/files/Screenshot_2026-06-06_at_1.23.46_PM.png?v=1781434206",
+            title: "2k Camera",
+            description: "2k resolution camera with advanced features for photography enthusiasts.",
+            imageUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQY89slUAEbgy_DU95GLBAb5YGnvd1wisgjfIDEw7TFvBcfWtqX2z1V1fzX&s=10",
             pointsCost: 150000,
             productValue: 1000,
             isActive: true
         },
         {
             id: 2,
-            title: "eadf",
-            description: "adf adf ",
-            imageUrl: "https://cdn.shopify.com/s/files/1/0824/6349/0298/files/Screenshot_2026-06-01_at_1.32.43_PM.png?v=1780673037",
+            title: "4k Camera",
+            description: "4k resolution camera with advanced features for photography enthusiasts.",
+            imageUrl: "https://proav.co.uk/media/catalog/product/cache/9bb9d677791f8666003e194c8a94aeff/h/x/hxr-nx800_1.jpg",
             pointsCost: 516600,
             productValue: 3444,
             isActive: true
