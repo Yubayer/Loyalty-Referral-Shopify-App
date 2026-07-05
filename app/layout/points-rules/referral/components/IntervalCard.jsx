@@ -1,0 +1,91 @@
+import { INTERVAL_OPTIONS } from "@shared-utils/constants/ruleConstants";
+import { PointsFields } from "./PointsFields";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// IntervalCard
+//
+// One global interval override row (Priority 2).
+// Shows interval select + PointsFields for referrer/referred.
+//
+// Props:
+//   iv             {object}   - { interval, referrer, referred }
+//   idx            {number}
+//   isSubscription {boolean}
+//   busy           {boolean}
+//   onRemove       {Function} - (idx) => void
+//   onInterval     {Function} - (idx, value) => void
+//   onReferrer     {Function} - (idx, field, value) => void
+//   onReferred     {Function} - (idx, field, value) => void
+//   usedIntervals  {Set}      - intervals already used by other cards
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function IntervalCard({
+    iv,
+    idx,
+    isSubscription,
+    busy,
+    onRemove,
+    onInterval,
+    onReferrer,
+    onReferred,
+    usedIntervals,
+}) {
+    return (
+        <s-box paddingBlockEnd="base">
+            <s-box
+                padding="base"
+                background="base"
+                borderWidth="base"
+                borderColor="base"
+                borderRadius="base"
+            >
+                <s-grid gridTemplateColumns="1fr auto" gap="small" alignItems="center">
+                    <s-text>
+                        <strong>
+                            Interval — {INTERVAL_OPTIONS.find((o) => o.value === iv.interval)?.label ?? "Not selected"}
+                        </strong>
+                    </s-text>
+                    <s-button
+                        icon="delete"
+                        tone="critical"
+                        variant="tertiary"
+                        disabled={busy}
+                        onClick={() => onRemove(idx)}
+                    />
+                </s-grid>
+
+                <s-box paddingBlockEnd="small" />
+
+                <s-select
+                    label="Interval"
+                    labelAccessibilityVisibility="exclusive"
+                    value={iv.interval}
+                    disabled={busy}
+                    onChange={(e) => onInterval(idx, e.target.value)}
+                >
+                    {INTERVAL_OPTIONS.map(({ value, label }) => {
+                        const usedByOther = usedIntervals.has(value) && value !== iv.interval;
+                        return (
+                            <s-option key={value} value={value} disabled={usedByOther || undefined}>
+                                {label}{usedByOther ? " (added)" : ""}
+                            </s-option>
+                        );
+                    })}
+                </s-select>
+
+                <s-box paddingBlockEnd="small" />
+
+                <PointsFields
+                    referrerVal={iv.referrer}
+                    referredVal={iv.referred}
+                    onReferrer={(field, value) => onReferrer(idx, field, value)}
+                    onReferred={(field, value) => onReferred(idx, field, value)}
+                    showRenewal={isSubscription}
+                    showRenewalToggle={isSubscription}
+                    tooltipPrefix={`interval-${idx}`}
+                    busy={busy}
+                />
+            </s-box>
+        </s-box>
+    );
+}

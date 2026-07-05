@@ -1,0 +1,153 @@
+import { TRIGGER_DESCRIPTIONS, getIntervalLabel } from "@points-rules-shared/constants/ruleConstants";
+import { ActiveToggle } from "@points-rules-shared/rule-components/ActiveToggle";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SummaryPanel
+//
+// Right-column summary card for the referral rule page.
+//
+// Props:
+//   event          {object}  - loaded event { name }
+//   referral       {object}  - fs.form.referral
+//   isSubscription {boolean}
+//   isActive       {boolean}
+//   onActiveChange {Function} - (checked) => void
+//   busy           {boolean}
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function SummaryPanel({ event, referral, isSubscription, isActive, onActiveChange, busy }) {
+    const ref = referral.referrer;
+    const referred = referral.referred;
+
+    const friendDiscountLabel = referred.discountType === "percentage"
+        ? `${referred.discountValue || 0}% off`
+        : `$${referred.discountValue || 0} off`;
+
+    const renewalText = (cfg) =>
+        isSubscription && cfg?.allowRenewalReward
+            ? ` + ${cfg.renewalPoints || 0} pts on every renewal`
+            : "";
+
+    return (
+        <>
+            <s-section>
+                <s-heading>Summary</s-heading>
+                <s-box paddingBlockEnd="small" />
+
+                <s-text><strong>Event:</strong> {event?.name ?? "Referral"}</s-text>
+                <s-box paddingBlockEnd="small" />
+
+                <s-text>
+                    <strong>Applies to:</strong>{" "}
+                    {TRIGGER_DESCRIPTIONS[referral.trigger] ?? referral.trigger}
+                </s-text>
+                <s-box paddingBlockEnd="small" />
+
+                <s-grid gridTemplateColumns="1fr auto" gap="small" alignItems="center">
+                    <s-text>
+                        <strong>Friend's discount:</strong> {friendDiscountLabel} on their first order
+                    </s-text>
+                    <s-badge tone="info">Always applies</s-badge>
+                </s-grid>
+
+                <s-box paddingBlockEnd="base" />
+                <s-divider />
+                <s-box paddingBlockEnd="base" />
+
+                {/* P1 — global default */}
+                <s-grid gridTemplateColumns="1fr auto" gap="small" alignItems="center">
+                    <s-text><strong>Default Rewards</strong></s-text>
+                    <s-badge tone="info">Global</s-badge>
+                </s-grid>
+                <s-text tone="subdued">
+                    Applies to every product, unless a product-group or subscription-renewal override matches.
+                </s-text>
+                <s-box paddingBlockEnd="small" />
+                <s-text>Referrer: {ref.points || 0} pts on first order{renewalText(ref)}</s-text>
+                <s-text>Friend: {referred.points || 0} pts on first order{renewalText(referred)}</s-text>
+
+                {/* P2 — global intervals */}
+                {isSubscription && (referral.intervals ?? []).length > 0 && (
+                    <>
+                        <s-box paddingBlockEnd="base" />
+                        <s-divider />
+                        <s-box paddingBlockEnd="base" />
+                        <s-grid gridTemplateColumns="1fr auto" gap="small" alignItems="center">
+                            <s-heading>Subscription Renewal</s-heading>
+                            <s-badge tone="warning">Global · Subscription only</s-badge>
+                        </s-grid>
+                        <s-text tone="subdued">
+                            Replaces default rewards for products not in any group, based on renewal interval.
+                        </s-text>
+                        <s-box paddingBlockEnd="small" />
+                        {referral.intervals.map((iv, i) => (
+                            <s-box key={i}>
+                                <s-text>
+                                    {getIntervalLabel(iv.interval)} — Referrer: {iv.referrer?.points || 0} pts, Friend: {iv.referred?.points || 0} pts
+                                </s-text>
+                            </s-box>
+                        ))}
+                    </>
+                )}
+
+                {/* P3 + P4 — product groups */}
+                {(referral.groups ?? []).length > 0 && (
+                    <>
+                        <s-box paddingBlockEnd="base" />
+                        <s-divider />
+                        <s-box paddingBlockEnd="base" />
+                        <s-heading>Product Groups:</s-heading>
+                        <s-text tone="subdued">
+                            Replaces everything above for products placed in a group.
+                        </s-text>
+                        {referral.groups.map((group, gi) => (
+                            <s-box key={group.id ?? gi} paddingBlockStart="small">
+                                <s-grid gridTemplateColumns="1fr auto" gap="small" alignItems="center">
+                                    <s-text><strong>{group.name || `Group ${gi + 1}`}</strong></s-text>
+                                    <s-badge tone="success">Group</s-badge>
+                                </s-grid>
+                                <s-text tone="subdued">
+                                    {(group.products ?? []).length} product{(group.products ?? []).length !== 1 ? "s" : ""}
+                                </s-text>
+                                <s-text>
+                                    Referrer: {group.referrer?.points || 0} pts on first order{renewalText(group.referrer)}
+                                </s-text>
+                                <s-text>
+                                    Friend: {group.referred?.points || 0} pts on first order{renewalText(group.referred)}
+                                </s-text>
+                                {/* P4 */}
+                                {isSubscription && (group.intervals ?? []).length > 0 && (
+                                    <>
+                                        <s-box paddingBlockEnd="small" />
+                                        <s-grid gridTemplateColumns="1fr auto" gap="small" alignItems="center">
+                                            <s-text tone="subdued">Renewal overrides for this group</s-text>
+                                            <s-badge tone="warning">Group · Subscription only</s-badge>
+                                        </s-grid>
+                                        {group.intervals.map((iv, ii) => (
+                                            <s-box key={ii}>
+                                                <s-text>
+                                                    {getIntervalLabel(iv.interval)} — Referrer: {iv.referrer?.points || 0} pts, Friend: {iv.referred?.points || 0} pts
+                                                </s-text>
+                                            </s-box>
+                                        ))}
+                                    </>
+                                )}
+                            </s-box>
+                        ))}
+                    </>
+                )}
+
+                <s-box paddingBlockEnd="base" />
+                <s-divider />
+                <s-box paddingBlockEnd="base" />
+                <s-text>
+                    <strong>Status:</strong>{" "}
+                    {isActive ? "Active ✅" : "Inactive ❌"}
+                </s-text>
+            </s-section>
+
+            <s-box paddingBlockEnd="base" />
+            <ActiveToggle checked={isActive} onChange={onActiveChange} busy={busy} />
+        </>
+    );
+}

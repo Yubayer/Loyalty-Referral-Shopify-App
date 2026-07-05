@@ -1,0 +1,49 @@
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = "259e35bb9c2fefba898dd1a11710ef6e"
+application_url = "https://nbl-loyalty-and-referral-production.up.railway.app"
+embedded = true
+name = "Loyalty & Referral [PRE]"
+handle = "northborders-lnr"
+
+[webhooks]
+api_version = "2026-04"
+
+  [[webhooks.subscriptions]]
+  uri = "https://nbl-loyalty-and-referral-production.up.railway.app/webhooks/app/scopes_update"
+  topics = [ "app/scopes_update" ]
+
+  [[webhooks.subscriptions]]
+  uri = "https://nbl-loyalty-and-referral-production.up.railway.app/webhooks/app/uninstalled"
+  topics = [ "app/uninstalled" ]
+
+  [[webhooks.subscriptions]]
+  uri = "https://nbl-loyalty-and-referral-production.up.railway.app/webhooks/app/orders_paid"
+  topics = [ "orders/paid" ]
+
+  [[webhooks.subscriptions]]
+  uri = "https://nbl-loyalty-and-referral-production.up.railway.app/webhooks/app/orders_cancelled"
+  topics = [ "orders/cancelled" ]
+
+  [[webhooks.subscriptions]]
+  uri = "https://nbl-loyalty-and-referral-production.up.railway.app/webhooks/app/refunds_create"
+  topics = [ "refunds/create" ]
+
+  [[webhooks.subscriptions]]
+  uri = "https://nbl-loyalty-and-referral-production.up.railway.app/webhooks/app/customers_create"
+  topics = [ "customers/create" ]
+
+  [[webhooks.subscriptions]]
+  uri = "https://nbl-loyalty-and-referral-production.up.railway.app/webhooks/app/customers_delete"
+  topics = [ "customers/delete" ]
+
+[access_scopes]
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+scopes = "read_customers,write_customers,read_discounts,write_discounts,read_files,write_files,read_orders,read_products,write_products,read_own_subscription_contracts,customer_read_own_subscription_contracts"
+optional_scopes = [ ]
+use_legacy_install_flow = false
+
+[auth]
+redirect_urls = [
+  "https://nbl-loyalty-and-referral-production.up.railway.app/api/auth"
+]

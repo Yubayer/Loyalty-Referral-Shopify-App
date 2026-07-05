@@ -1,0 +1,204 @@
+import { useLoaderData, useActionData, useNavigate, redirect } from "react-router";
+import { authenticate } from "shopify-server";
+import prisma from "db-server";
+import syncAppConfig from "@controller/metafieldsSync/syncAppConfig";
+
+import { useRuleForm } from "@shared-utils/rule-utils/useRuleForm";
+import { useSubmitBusy } from "@shared-utils/rule-utils/useSubmitBusy";
+import { useToastRedirect } from "@shared-utils/rule-utils/useToastRedirect";
+import { PageHeader } from "@shared-utils/rule-components/PageHeader";
+import { DescriptionField } from "@shared-utils/rule-components/DescriptionField";
+import { SaveBar } from "@app/components/saveBar/SaveBar";
+
+import { buildConditions, buildFormShape, validate, REVIEW_TYPES } from "./_data";
+import { ReviewTypeCard } from "./components/ReviewTypeCard";
+import { RewardModeSelector } from "./components/RewardModeSelector";
+import { SummaryPanel } from "./components/SummaryPanel";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LOADER
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const loader = async ({ request }) => {
+    const { session } = await authenticate.admin(request);
+    const ruleId = new URL(request.url).searchParams.get("ruleId");
+
+    const event = await prisma.event.findFirst({
+        where: { sessionId: session.id, type: "REVIEW", isActive: true },
+    });
+    if (!event) return redirect("/app/points-rules");
+
+    if (ruleId) {
+        const rule = await prisma.pointsRule.findUnique({
+            where: { id: parseInt(ruleId) },
+            include: { event: true },
+        });
+        if (!rule || rule.sessionId !== session.id) return redirect("/app/points-rules");
+        return { rule, event, mode: "edit" };
+    }
+
+    return { rule: null, event, mode: "create" };
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ACTION
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const action = async ({ request }) => {
+    const { session, admin } = await authenticate.admin(request);
+    const formData = await request.formData();
+    const submitType = formData.get("submitType");
+    const payload = JSON.parse(formData.get("payload") || "{}");
+
+    if (submitType === "createRule") {
+        try {
+            const event = await prisma.event.findFirst({
+                where: { sessionId: session.id, type: "REVIEW", isActive: true },
+            });
+            if (!event) return { message: "REVIEW event not found.", status: "error", submitType };
+
+            const existing = await prisma.pointsRule.findFirst({
+                where: { eventId: event.id, sessionId: session.id },
+            });
+            if (existing) return { message: "A rule for this event already exists.", status: "error", submitType };
+
+            const created = await prisma.pointsRule.create({
+                data: {
+                    name: payload.name || null,
+                    description: payload.description || null,
+                    isActive: payload.isActive ?? true,
+                    conditions: buildConditions(payload.review),
+                    session: { connect: { id: session.id } },
+                    event: { connect: { id: event.id } },
+                },
+            });
+            await syncAppConfig(admin, session);
+            return { message: "Points rule created successfully.", rule: created, status: "success", submitType };
+        } catch (err) {
+            console.error("Create REVIEW Rule Error:", err);
+            return { message: "Failed to create rule. Please try again.", status: "error", submitType };
+        }
+    }
+
+    if (submitType === "updateRule") {
+        const ruleId = parseInt(formData.get("ruleId"));
+        if (!ruleId) return { message: "Rule ID is required.", status: "error", submitType };
+        try {
+            const existing = await prisma.pointsRule.findUnique({ where: { id: ruleId } });
+            if (!existing || existing.sessionId !== session.id)
+                return { message: "Rule not found or access denied.", status: "error", submitType };
+
+            const rule = await prisma.pointsRule.update({
+                where: { id: ruleId },
+                data: {
+                    name: payload.name || null,
+                    description: payload.description || null,
+                    isActive: payload.isActive ?? true,
+                    conditions: buildConditions(payload.review),
+                },
+            });
+            await syncAppConfig(admin, session);
+            return { message: "Points rule updated successfully.", rule, status: "success", submitType };
+        } catch (err) {
+            console.error("Update REVIEW Rule Error:", err);
+            return { message: "Failed to update rule. Please try again.", status: "error", submitType };
+        }
+    }
+
+    return { message: "Invalid action.", status: "error", submitType };
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PAGE
+// ─────────────────────────────────────────────────────────────────────────────
+
+export default function ReviewRulePage() {
+    const { rule, event, mode } = useLoaderData();
+    const actionData = useActionData();
+    const navigate = useNavigate();
+
+    const busy = useSubmitBusy();
+    const fs = useRuleForm(rule, buildFormShape, validate, "review", mode);
+
+    useToastRedirect(actionData);
+
+    const review = fs.form.review;
+
+    return (
+        <>
+            <s-page inlineSize="base">
+                <PageHeader title="Review Rule" mode={mode} isActive={fs.form.isActive} busy={busy} />
+
+                <s-grid gridTemplateColumns="2fr 1fr" gap="base">
+                    <s-box>
+
+                        {/* Review types */}
+                        <s-section>
+                            <s-heading>Review Types & Points</s-heading>
+                            <s-text tone="subdued">
+                                Enable or disable each type and set how many points it earns.
+                            </s-text>
+                            <s-box paddingBlockEnd="base" />
+                            {fs.errorFor("review.types") && (
+                                <>
+                                    <s-text tone="critical">{fs.errorFor("review.types")}</s-text>
+                                    <s-box paddingBlockEnd="small" />
+                                </>
+                            )}
+                            {REVIEW_TYPES.map(({ key, label, description }) => (
+                                <ReviewTypeCard
+                                    key={key}
+                                    typeKey={key}
+                                    label={label}
+                                    description={description}
+                                    val={review[key]}
+                                    error={fs.errorFor(`review.${key}.points`)}
+                                    busy={busy}
+                                    onToggle={(v) => fs.set(`review.${key}.isActive`, v)}
+                                    onPoints={(v) => fs.set(`review.${key}.points`, v)}
+                                />
+                            ))}
+                        </s-section>
+
+                        <s-box paddingBlockEnd="base" />
+
+                        <RewardModeSelector
+                            value={review.rewardMode}
+                            busy={busy}
+                            onChange={(v) => fs.set("review.rewardMode", v)}
+                        />
+
+                        <s-box paddingBlockEnd="base" />
+                        <DescriptionField
+                            value={fs.form.description}
+                            onChange={(v) => fs.set("description", v)}
+                            busy={busy}
+                        />
+                    </s-box>
+
+                    <s-box>
+                        <SummaryPanel
+                            event={event}
+                            review={review}
+                            isActive={fs.form.isActive}
+                            onActiveChange={(v) => fs.set("isActive", v)}
+                            busy={busy}
+                        />
+                    </s-box>
+                </s-grid>
+            </s-page>
+
+            <SaveBar
+                visible={mode === "create" || fs.isDirty}
+                position="bottom-center"
+                message={mode === "edit" ? "You have unsaved changes" : "Ready to save your new rule"}
+                primaryLabel={mode === "edit" ? "Update Rule" : "Save Rule"}
+                secondaryLabel={mode === "edit" ? "Discard Changes" : "Cancel"}
+                onPrimary={fs.submit}
+                onSecondary={() => mode === "edit" ? fs.reset() : navigate("/app/points-rules")}
+                loading={busy}
+                disabled={busy}
+            />
+        </>
+    );
+}

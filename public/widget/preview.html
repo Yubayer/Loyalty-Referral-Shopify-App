@@ -1,0 +1,94 @@
+<!--
+  public/widget/preview.html
+
+  Standalone document that boots the REAL widget bundle (preview.min.js —
+  the Rollup-built, minified Preact widget) with mock customer/loyalty data.
+  Used only as the `src` of the <iframe> in customize/livePreview/LivePreview.jsx.
+
+  IMPORTANT: this is a STATIC file (not a React Router route). It's served
+  directly by Vite/the static file server, so it never touches the Shopify
+  app's session/auth pipeline — that's what avoids the "admin.shopify.com
+  refused to connect" exit-iframe bounce.
+
+  NOT meant to be visited directly by merchants.
+
+  LOAD ORDER (critical):
+    1. preview-moc-config.js  — sets window.NBL_v1 with full mock data
+    2. preview-bridge.js      — mocks fetch() + wires postMessage to __bridge
+    3. preview.min.js         — Rollup/Preact bundle; on mount, App.jsx
+                                 injects functions into window.NBL_v1.__bridge
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="robots" content="noindex" />
+    <link rel="stylesheet" href="/widget/preview.min.css" />
+    <style>
+        html,
+        body {
+            margin: 0;
+            padding: 0;
+            background: transparent;
+            height: 100%;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        /* main.css selectors don't set a base font-family (storefront themes
+           usually inherit it from the theme's global body font) — inherit
+           it down explicitly so widget text doesn't fall back to serif. */
+        #nbl-loyalty-root,
+        #nbl-loyalty-root * {
+            font-family: inherit;
+        }
+
+        .nbl-widget-container-v1.active {
+            /* box-shadow: 0 2px 2px rgba(0, 0, 0, 0.22),
+                0 8px 24px rgba(0, 0, 0, 0.12),
+                0 0 0 1px var(--nbl-widget-glow-primary),
+                0 0 0 4px var(--nbl-widget-glow-halo) !important; */
+            animation: nbl-widget-entrance 0.42s var(--nbl-ease-spring) both;
+        }
+
+        /* Intentionally no .nbl-widget-container width/height override here
+           anymore. This used to hardcode 380×450 (a stale, non-uniform copy
+           that drifted from ui.css's real 390×520 and had a different
+           aspect ratio besides — the likely source of the "sometimes looks
+           off" sizing glitches). The widget's own open/close entrance
+           animation already uses `transform: scale(...)` with `!important`
+           on `.active` (see ui.css), so any size override attempted here at
+           the widget level would fight that transform. The panel now
+           renders at its true ui.css size, and the "slightly smaller than
+           the real storefront" shrink is applied to the <iframe> element
+           itself from the parent (LivePreview.jsx) via a CSS transform —
+           that's a compositing-level scale, so it never touches or
+           conflicts with anything inside this document. */
+        .nbl-widget-container {
+            /* Kept from the old override — makes the panel's edge visible
+               against the transparent iframe in the admin preview area. */
+            box-shadow: 0px 0px 11px 3px gray !important;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- 1. Mock data — full appConfig + customer + liquidData shape.
+         preview-moc-config.js sets window.NBL_v1 with realistic fixture data
+         so the widget renders a populated, realistic state. -->
+    <script src="/widget/preview-moc-config.js"></script>
+
+    <!-- 2. Bridge — fetch() intercept + postMessage → __bridge wiring.
+         Must load BEFORE preview.min.js so:
+           a) The very first api.js fetch() call is already mocked.
+           b) whenBridgeReady() polling starts before App mounts, so the
+              "ready" postMessage fires immediately after mount. -->
+    <script src="/widget/preview-bridge.js"></script>
+
+    <!-- 3. Widget bundle — Rollup + Preact build.
+         main.preact.jsx boots here; on mount App.jsx populates
+         window.NBL_v1.__bridge with setScene / setCssVars / setWidgetConfig. -->
+    <script type="module" src="/widget/preview.min.js"></script>
+</body>
+
+</html>

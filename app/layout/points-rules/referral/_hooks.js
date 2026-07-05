@@ -1,0 +1,414 @@
+import { useCallback } from "react";
+import { useAppBridge } from "@shopify/app-bridge-react";
+import { INTERVAL_OPTIONS } from "@shared-utils/constants/ruleConstants";
+
+/**
+ * useReferralHandlers
+ *
+ * All referral-specific form handlers, grouped by concern.
+ * Accepts the form state object from useRuleForm and returns
+ * a structured object — no flat list of functions.
+ *
+ * @param {object} formState - form state returned by useRuleForm
+ * @returns {{ trigger, intervals, groups }} grouped handlers
+ *
+ * @example
+ * const referralHandlers = useReferralHandlers(formState);
+ * referralHandlers.trigger.change("subscription");
+ * referralHandlers.intervals.add();
+ * referralHandlers.groups.intervals.add(groupIndex);
+ */
+export function useReferralHandlers(formState) {
+    const shopify = useAppBridge();
+
+    // ── Trigger ───────────────────────────────────────────────────────────────
+
+    /**
+     * Changes the referral trigger type.
+     * Clears all interval overrides (global + per-group) when switching to
+     * "oneTime" since intervals are a subscription-only concept.
+     *
+     * @param {string} newTrigger - "oneTime" | "subscription" | "both"
+     */
+    const changeTrigger = useCallback((newTrigger) => {
+        if (newTrigger !== "oneTime") {
+            formState.set("referral.trigger", newTrigger);
+            return;
+        }
+        formState.set("referral", {
+            ...formState.form.referral,
+            trigger: newTrigger,
+            intervals: [],
+            groups: (formState.form.referral.groups ?? []).map((group) => ({
+                ...group,
+                intervals: [],
+            })),
+        });
+    }, [formState]);
+
+    // ── Global intervals (P2) ─────────────────────────────────────────────────
+
+    /**
+     * Adds a new global interval override using the next unused interval value.
+     * Shows a toast if all intervals are already in use.
+     */
+    const addInterval = useCallback(() => {
+        const usedValues = new Set(
+            (formState.form.referral.intervals ?? []).map((interval) => interval.interval)
+        );
+        const nextAvailable = INTERVAL_OPTIONS.find((option) => !usedValues.has(option.value));
+        if (!nextAvailable) {
+            shopify.toast.show("All intervals are already added.", { isError: true });
+            return;
+        }
+        formState.addItem("referral.intervals", {
+            interval: nextAvailable.value,
+            referrer: { points: 130, allowRenewalReward: false, renewalPoints: 100 },
+            referred: { points: 65, allowRenewalReward: false, renewalPoints: 50 },
+        });
+    }, [formState, shopify]);
+
+    /**
+     * Removes a global interval override by index.
+     * @param {number} intervalIndex
+     */
+    const removeInterval = useCallback((intervalIndex) => {
+        formState.removeItem("referral.intervals", intervalIndex);
+    }, [formState]);
+
+    /**
+     * Updates the interval value (e.g. "monthly") for a global interval.
+     * Shows a toast if the selected value is already used by another interval.
+     *
+     * @param {number} intervalIndex
+     * @param {string} newIntervalValue
+     */
+    const updateIntervalValue = useCallback((intervalIndex, newIntervalValue) => {
+        const isDuplicate = (formState.form.referral.intervals ?? []).some(
+            (interval, index) => index !== intervalIndex && interval.interval === newIntervalValue
+        );
+        if (isDuplicate) {
+            shopify.toast.show(`"${newIntervalValue}" interval is already added.`, { isError: true });
+            return;
+        }
+        const updated = [...formState.form.referral.intervals];
+        updated[intervalIndex] = { ...updated[intervalIndex], interval: newIntervalValue };
+        formState.set("referral.intervals", updated);
+    }, [formState, shopify]);
+
+    /**
+     * Updates a referrer field within a global interval.
+     * @param {number} intervalIndex
+     * @param {string} field
+     * @param {*}      value
+     */
+    const updateIntervalReferrer = useCallback((intervalIndex, field, value) => {
+        const updated = [...formState.form.referral.intervals];
+        updated[intervalIndex] = {
+            ...updated[intervalIndex],
+            referrer: { ...updated[intervalIndex].referrer, [field]: value },
+        };
+        formState.set("referral.intervals", updated);
+    }, [formState]);
+
+    /**
+     * Updates a referred field within a global interval.
+     * @param {number} intervalIndex
+     * @param {string} field
+     * @param {*}      value
+     */
+    const updateIntervalReferred = useCallback((intervalIndex, field, value) => {
+        const updated = [...formState.form.referral.intervals];
+        updated[intervalIndex] = {
+            ...updated[intervalIndex],
+            referred: { ...updated[intervalIndex].referred, [field]: value },
+        };
+        formState.set("referral.intervals", updated);
+    }, [formState]);
+
+    // ── Groups (P3) ───────────────────────────────────────────────────────────
+
+    /** Adds a new product group with default referrer/referred point values. */
+    const addGroup = useCallback(() => {
+        formState.addItem("referral.groups", {
+            id: crypto.randomUUID(),
+            name: `Group ${(formState.form.referral.groups?.length ?? 0) + 1}`,
+            products: [],
+            referrer: { points: 150, allowRenewalReward: false, renewalPoints: 120 },
+            referred: { points: 75, allowRenewalReward: false, renewalPoints: 60 },
+            intervals: [],
+        });
+    }, [formState]);
+
+    /**
+     * Removes a group by index.
+     * @param {number} groupIndex
+     */
+    const removeGroup = useCallback((groupIndex) => {
+        formState.removeItem("referral.groups", groupIndex);
+    }, [formState]);
+
+    /**
+     * Updates a top-level field on a group (e.g. "name", "products").
+     * @param {number} groupIndex
+     * @param {string} field
+     * @param {*}      value
+     */
+    const updateGroupField = useCallback((groupIndex, field, value) => {
+        formState.updateItem("referral.groups", groupIndex, field, value);
+    }, [formState]);
+
+    /**
+     * Updates a referrer field within a group.
+     * @param {number} groupIndex
+     * @param {string} field
+     * @param {*}      value
+     */
+    const updateGroupReferrer = useCallback((groupIndex, field, value) => {
+        const updated = [...formState.form.referral.groups];
+        updated[groupIndex] = {
+            ...updated[groupIndex],
+            referrer: { ...updated[groupIndex].referrer, [field]: value },
+        };
+        formState.set("referral.groups", updated);
+    }, [formState]);
+
+    /**
+     * Updates a referred field within a group.
+     * @param {number} groupIndex
+     * @param {string} field
+     * @param {*}      value
+     */
+    const updateGroupReferred = useCallback((groupIndex, field, value) => {
+        const updated = [...formState.form.referral.groups];
+        updated[groupIndex] = {
+            ...updated[groupIndex],
+            referred: { ...updated[groupIndex].referred, [field]: value },
+        };
+        formState.set("referral.groups", updated);
+    }, [formState]);
+
+    // ── Group intervals (P4) ──────────────────────────────────────────────────
+
+    /**
+     * Adds a new interval override inside a group.
+     * Auto-picks the next unused interval for that group.
+     *
+     * @param {number} groupIndex
+     */
+    const addGroupInterval = useCallback((groupIndex) => {
+        const groups = [...formState.form.referral.groups];
+        const usedValues = new Set(
+            (groups[groupIndex].intervals ?? []).map((interval) => interval.interval)
+        );
+        const nextAvailable = INTERVAL_OPTIONS.find((option) => !usedValues.has(option.value));
+        if (!nextAvailable) {
+            shopify.toast.show("All intervals are already added to this group.", { isError: true });
+            return;
+        }
+        groups[groupIndex] = {
+            ...groups[groupIndex],
+            intervals: [
+                ...(groups[groupIndex].intervals ?? []),
+                {
+                    interval: nextAvailable.value,
+                    referrer: { points: 120, allowRenewalReward: false, renewalPoints: 90 },
+                    referred: { points: 60, allowRenewalReward: false, renewalPoints: 45 },
+                },
+            ],
+        };
+        formState.set("referral.groups", groups);
+    }, [formState, shopify]);
+
+    /**
+     * Removes an interval override from inside a group.
+     * @param {number} groupIndex
+     * @param {number} intervalIndex
+     */
+    const removeGroupInterval = useCallback((groupIndex, intervalIndex) => {
+        const groups = [...formState.form.referral.groups];
+        groups[groupIndex] = {
+            ...groups[groupIndex],
+            intervals: groups[groupIndex].intervals.filter((_, index) => index !== intervalIndex),
+        };
+        formState.set("referral.groups", groups);
+    }, [formState]);
+
+    /**
+     * Updates the interval value inside a group interval.
+     * Shows a toast if the value is already used by another interval in the same group.
+     *
+     * @param {number} groupIndex
+     * @param {number} intervalIndex
+     * @param {string} newIntervalValue
+     */
+    const updateGroupIntervalValue = useCallback((groupIndex, intervalIndex, newIntervalValue) => {
+        const isDuplicate = (formState.form.referral.groups[groupIndex].intervals ?? []).some(
+            (interval, index) => index !== intervalIndex && interval.interval === newIntervalValue
+        );
+        if (isDuplicate) {
+            shopify.toast.show(`"${newIntervalValue}" interval is already added to this group.`, { isError: true });
+            return;
+        }
+        const groups = [...formState.form.referral.groups];
+        const intervals = [...groups[groupIndex].intervals];
+        intervals[intervalIndex] = { ...intervals[intervalIndex], interval: newIntervalValue };
+        groups[groupIndex] = { ...groups[groupIndex], intervals };
+        formState.set("referral.groups", groups);
+    }, [formState, shopify]);
+
+    /**
+     * Updates a referrer field within a group interval.
+     * @param {number} groupIndex
+     * @param {number} intervalIndex
+     * @param {string} field
+     * @param {*}      value
+     */
+    const updateGroupIntervalReferrer = useCallback((groupIndex, intervalIndex, field, value) => {
+        const groups = [...formState.form.referral.groups];
+        const intervals = [...groups[groupIndex].intervals];
+        intervals[intervalIndex] = {
+            ...intervals[intervalIndex],
+            referrer: { ...intervals[intervalIndex].referrer, [field]: value },
+        };
+        groups[groupIndex] = { ...groups[groupIndex], intervals };
+        formState.set("referral.groups", groups);
+    }, [formState]);
+
+    /**
+     * Updates a referred field within a group interval.
+     * @param {number} groupIndex
+     * @param {number} intervalIndex
+     * @param {string} field
+     * @param {*}      value
+     */
+    const updateGroupIntervalReferred = useCallback((groupIndex, intervalIndex, field, value) => {
+        const groups = [...formState.form.referral.groups];
+        const intervals = [...groups[groupIndex].intervals];
+        intervals[intervalIndex] = {
+            ...intervals[intervalIndex],
+            referred: { ...intervals[intervalIndex].referred, [field]: value },
+        };
+        groups[groupIndex] = { ...groups[groupIndex], intervals };
+        formState.set("referral.groups", groups);
+    }, [formState]);
+
+    // ── Product picker ────────────────────────────────────────────────────────
+
+    /**
+     * Returns a Set of product IDs that are blocked for a given group picker —
+     * i.e. products already assigned to any OTHER group.
+     *
+     * @param {number} groupIndex
+     * @returns {Set<string>}
+     */
+    const getBlockedProductIdsForGroup = useCallback((groupIndex) => {
+        return new Set(
+            (formState.form.referral.groups ?? [])
+                .filter((_, index) => index !== groupIndex)
+                .flatMap((group) => (group.products ?? []).map((product) => product.id))
+        );
+    }, [formState]);
+
+    /**
+     * Opens the Shopify resource picker for a group's products.
+     * Filters out products already assigned to other groups and shows a toast
+     * if any selected products were skipped.
+     *
+     * @param {number} groupIndex
+     */
+    const openGroupProductPicker = useCallback(async (groupIndex) => {
+        const group = formState.form.referral.groups[groupIndex];
+        const selectionIds = (group.products ?? []).map((product) => ({ id: product.id }));
+
+        const result = await shopify.resourcePicker({
+            type: "product", multiple: true, selectionIds, filter: { variants: false },
+        });
+        if (!result?.selection?.length) return;
+
+        const blockedIds = getBlockedProductIdsForGroup(groupIndex);
+        const allowedProducts = [];
+        const blockedTitles = [];
+
+        result.selection.forEach((selected) => {
+            if (blockedIds.has(selected.id)) {
+                blockedTitles.push(selected.title);
+            } else {
+                allowedProducts.push({
+                    id: selected.id,
+                    title: selected.title,
+                    image: selected.images?.[0]?.originalSrc ?? null,
+                    handle: selected.handle,
+                });
+            }
+        });
+
+        if (blockedTitles.length > 0) {
+            shopify.toast.show(
+                `${blockedTitles.length} product${blockedTitles.length > 1 ? "s" : ""} skipped — already in another group: ${blockedTitles.join(", ")}`,
+                { isError: true }
+            );
+        }
+        if (allowedProducts.length > 0) {
+            updateGroupField(groupIndex, "products", allowedProducts);
+        }
+    }, [formState, shopify, updateGroupField, getBlockedProductIdsForGroup]);
+
+    /**
+     * Removes a single product from a group's product list.
+     * @param {number} groupIndex
+     * @param {string} productId
+     */
+    const removeGroupProduct = useCallback((groupIndex, productId) => {
+        const group = formState.form.referral.groups[groupIndex];
+        updateGroupField(
+            groupIndex,
+            "products",
+            group.products.filter((product) => product.id !== productId)
+        );
+    }, [formState, updateGroupField]);
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Grouped return
+    // ─────────────────────────────────────────────────────────────────────────
+
+    return {
+        /** Trigger type handler */
+        trigger: {
+            change: changeTrigger,
+        },
+
+        /** Global interval overrides (Priority 2) */
+        intervals: {
+            add: addInterval,
+            remove: removeInterval,
+            updateValue: updateIntervalValue,
+            updateReferrer: updateIntervalReferrer,
+            updateReferred: updateIntervalReferred,
+        },
+
+        /** Product group handlers (Priority 3 + 4) */
+        groups: {
+            add: addGroup,
+            remove: removeGroup,
+            updateField: updateGroupField,
+            updateReferrer: updateGroupReferrer,
+            updateReferred: updateGroupReferred,
+
+            /** Products within a group */
+            products: {
+                openPicker: openGroupProductPicker,
+                remove: removeGroupProduct,
+            },
+
+            /** Interval overrides within a group (Priority 4) */
+            intervals: {
+                add: addGroupInterval,
+                remove: removeGroupInterval,
+                updateValue: updateGroupIntervalValue,
+                updateReferrer: updateGroupIntervalReferrer,
+                updateReferred: updateGroupIntervalReferred,
+            },
+        },
+    };
+}

@@ -1,0 +1,78 @@
+import { INTERVAL_OPTIONS } from "@points-rules-shared/constants/ruleConstants";
+import { EarningFields } from "./EarningFields";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// IntervalCard
+//
+// One global interval override row (Priority 2) for the order rule.
+//
+// Props:
+//   iv             {object}   - { interval, fixedPoints, rate }
+//   idx            {number}
+//   orderType      {string}   - "fixed" | "incremental"
+//   busy           {boolean}
+//   usedIntervals  {Set}      - intervals already used by other cards
+//   onRemove       {Function} - (idx) => void
+//   onInterval     {Function} - (idx, value) => void
+//   onField        {Function} - (idx, field, value) => void
+//   onRateField    {Function} - (idx, rateField, value) => void
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function IntervalCard({ iv, idx, orderType, busy, usedIntervals, onRemove, onInterval, onField, onRateField }) {
+    return (
+        <s-box paddingBlockEnd="base">
+            <s-box
+                padding="base"
+                background="base"
+                borderWidth="base"
+                borderColor="base"
+                borderRadius="base"
+            >
+                <s-grid gridTemplateColumns="1fr auto" gap="small" alignItems="center">
+                    <s-text>
+                        <strong>
+                            Interval — {INTERVAL_OPTIONS.find((o) => o.value === iv.interval)?.label ?? "Not selected"}
+                        </strong>
+                    </s-text>
+                    <s-button
+                        icon="delete"
+                        tone="critical"
+                        variant="tertiary"
+                        disabled={busy}
+                        onClick={() => onRemove(idx)}
+                    />
+                </s-grid>
+
+                <s-box paddingBlockEnd="small" />
+
+                <s-select
+                    label="Interval"
+                    labelAccessibilityVisibility="exclusive"
+                    value={iv.interval}
+                    disabled={busy}
+                    onChange={(e) => onInterval(idx, e.target.value)}
+                >
+                    {INTERVAL_OPTIONS.map(({ value, label }) => {
+                        const usedByOther = usedIntervals.has(value) && value !== iv.interval;
+                        return (
+                            <s-option key={value} value={value} disabled={usedByOther || undefined}>
+                                {label}{usedByOther ? " (added)" : ""}
+                            </s-option>
+                        );
+                    })}
+                </s-select>
+
+                <s-box paddingBlockEnd="small" />
+
+                <EarningFields
+                    val={iv}
+                    orderType={orderType}
+                    onChangeFixed={(v) => onField(idx, "fixedPoints", v)}
+                    onChangeRatePoints={(v) => onRateField(idx, "points", v)}
+                    onChangeRateAmount={(v) => onRateField(idx, "amount", v)}
+                    busy={busy}
+                />
+            </s-box>
+        </s-box>
+    );
+}

@@ -1,0 +1,53 @@
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = "409541047b7c32e629c4c494d6e8f168"
+name = "North Borders Loyalty [DEV]"
+application_url = "https://nbl-dev.app-handler.com"
+embedded = true
+handle = "north-borders-loyalty-dev"
+
+[build]
+automatically_update_urls_on_dev = true
+
+[webhooks]
+api_version = "2026-04"
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/orders_paid"
+  topics = [ "orders/paid" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/orders_cancelled"
+  topics = [ "orders/cancelled" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/refunds_create"
+  topics = [ "refunds/create" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/scopes_update"
+  topics = [ "app/scopes_update" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/customers_create"
+  topics = [ "customers/create" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/customers_delete"
+  topics = [ "customers/delete" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/uninstalled"
+  topics = [ "app/uninstalled" ]
+
+[access_scopes]
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+scopes = "customer_read_own_subscription_contracts,read_customers,read_discounts,read_files,read_orders,read_own_subscription_contracts,read_products,write_customers,write_discounts,write_files,write_products,write_app_proxy"
+
+[auth]
+redirect_urls = [ "https://nbl-dev.app-handler.com/api/auth" ]
+
+[app_proxy]
+url = "/widget-data"
+prefix = "apps"
+subpath = "widget"

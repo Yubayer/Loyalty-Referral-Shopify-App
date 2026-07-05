@@ -1,0 +1,329 @@
+import { useLoaderData, useActionData, useNavigate, redirect } from "react-router";
+import { authenticate } from "shopify-server";
+import prisma from "db-server";
+import syncAppConfig from "@controller/metafieldsSync/syncAppConfig";
+
+import { useRuleForm } from "@shared-utils/rule-utils/useRuleForm";
+import { useSubmitBusy } from "@shared-utils/rule-utils/useSubmitBusy";
+import { useToastRedirect } from "@shared-utils/rule-utils/useToastRedirect";
+import { PageHeader } from "@shared-utils/rule-components/PageHeader";
+import { DescriptionField } from "@shared-utils/rule-components/DescriptionField";
+import { SaveBar } from "@app/components/saveBar/SaveBar";
+
+import { buildConditions, buildFormShape, validate } from "./_data";
+import { useReferralHandlers } from "./_hooks";
+import { PointsFields } from "./components/PointsFields";
+import { IntervalCard } from "./components/IntervalCard";
+import { GroupCard } from "./components/GroupCard";
+import { SummaryPanel } from "./components/SummaryPanel";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LOADER
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const loader = async ({ request }) => {
+    const { session } = await authenticate.admin(request);
+    const ruleId = new URL(request.url).searchParams.get("ruleId");
+
+    const event = await prisma.event.findFirst({
+        where: { sessionId: session.id, type: "REFERRAL", isActive: true },
+    });
+    if (!event) return redirect("/app/points-rules");
+
+    if (ruleId) {
+        const rule = await prisma.pointsRule.findUnique({
+            where: { id: parseInt(ruleId) },
+            include: { event: true },
+        });
+        if (!rule || rule.sessionId !== session.id) return redirect("/app/points-rules");
+        return { rule, event, mode: "edit" };
+    }
+
+    return { rule: null, event, mode: "create" };
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ACTION
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const action = async ({ request }) => {
+    const { session, admin } = await authenticate.admin(request);
+    const formData = await request.formData();
+    const submitType = formData.get("submitType");
+    const payload = JSON.parse(formData.get("payload") || "{}");
+
+    if (submitType === "createRule") {
+        try {
+            const event = await prisma.event.findFirst({
+                where: { sessionId: session.id, type: "REFERRAL", isActive: true },
+            });
+            if (!event) return { message: "REFERRAL event not found.", status: "error", submitType };
+
+            const existing = await prisma.pointsRule.findFirst({
+                where: { eventId: event.id, sessionId: session.id },
+            });
+            if (existing) return { message: "A rule for this event already exists.", status: "error", submitType };
+
+            const created = await prisma.pointsRule.create({
+                data: {
+                    name: payload.name || null,
+                    description: payload.description || null,
+                    isActive: payload.isActive ?? true,
+                    conditions: buildConditions(payload.referral),
+                    session: { connect: { id: session.id } },
+                    event: { connect: { id: event.id } },
+                },
+            });
+            await syncAppConfig(admin, session);
+            return { message: "Points rule created successfully.", rule: created, status: "success", submitType };
+        } catch (error) {
+            console.error("Create REFERRAL Rule Error:", error);
+            return { message: "Failed to create rule. Please try again.", status: "error", submitType };
+        }
+    }
+
+    if (submitType === "updateRule") {
+        const ruleId = parseInt(formData.get("ruleId"));
+        if (!ruleId) return { message: "Rule ID is required.", status: "error", submitType };
+        try {
+            const existing = await prisma.pointsRule.findUnique({ where: { id: ruleId } });
+            if (!existing || existing.sessionId !== session.id)
+                return { message: "Rule not found or access denied.", status: "error", submitType };
+
+            const rule = await prisma.pointsRule.update({
+                where: { id: ruleId },
+                data: {
+                    name: payload.name || null,
+                    description: payload.description || null,
+                    isActive: payload.isActive ?? true,
+                    conditions: buildConditions(payload.referral),
+                },
+            });
+            await syncAppConfig(admin, session);
+            return { message: "Points rule updated successfully.", rule, status: "success", submitType };
+        } catch (error) {
+            console.error("Update REFERRAL Rule Error:", error);
+            return { message: "Failed to update rule. Please try again.", status: "error", submitType };
+        }
+    }
+
+    return { message: "Invalid action.", status: "error", submitType };
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PAGE
+// ─────────────────────────────────────────────────────────────────────────────
+
+export default function ReferralRulePage() {
+    const { rule, event, mode } = useLoaderData();
+    const actionData = useActionData();
+    const navigate = useNavigate();
+
+    const isBusy = useSubmitBusy();
+    const formState = useRuleForm(rule, buildFormShape, validate, "referral", mode);
+    const referralHandlers = useReferralHandlers(formState);
+
+    useToastRedirect(actionData);
+
+    const referral = formState.form.referral;
+    const isSubscription = referral.trigger === "subscription" || referral.trigger === "both";
+    const isGlobalValid =
+        Number(referral.referrer.points) > 0 &&
+        Number(referral.referred.points) > 0 &&
+        Number(referral.referred.discountValue) > 0;
+
+    const usedGlobalIntervalValues = new Set(
+        (referral.intervals ?? []).map((interval) => interval.interval)
+    );
+
+    return (
+        <>
+            <s-page inlineSize="base">
+                <PageHeader
+                    title="Referral Rule"
+                    mode={mode}
+                    isActive={formState.form.isActive}
+                    busy={isBusy}
+                />
+
+                <s-grid gridTemplateColumns="2fr 1fr" gap="base">
+                    <s-box>
+
+                        {/* Trigger */}
+                        <s-section>
+                            <s-heading>When should rewards be given?</s-heading>
+                            <s-text tone="subdued">
+                                Choose which types of orders trigger the referral reward.
+                            </s-text>
+                            <s-box paddingBlockEnd="small" />
+                            <s-choice-list
+                                name="referralTrigger"
+                                value={[referral.trigger]}
+                                onInput={(e) => referralHandlers.trigger.change(e.currentTarget.values[0])}
+                            >
+                                <s-choice value="oneTime" selected={referral.trigger === "oneTime"}>One-time purchase only</s-choice>
+                                <s-choice value="subscription" selected={referral.trigger === "subscription"}>Subscription orders only</s-choice>
+                                <s-choice value="both" selected={referral.trigger === "both"}>Both — all order types</s-choice>
+                            </s-choice-list>
+                        </s-section>
+
+                        <s-box paddingBlockEnd="base" />
+
+                        {/* New customer discount — always global, never overridden */}
+                        <s-section>
+                            <s-heading>New Customer Discount</s-heading>
+                            <s-text tone="subdued">
+                                The referred customer gets this discount on their first order. Never overridden.
+                            </s-text>
+                            <s-box paddingBlockEnd="base" />
+                            <s-choice-list
+                                name="discountType"
+                                value={[referral.referred.discountType]}
+                                onInput={(e) => formState.set("referral.referred.discountType", e.currentTarget.values[0])}
+                            >
+                                <s-choice value="fixed" selected={referral.referred.discountType === "fixed"}>Fixed amount</s-choice>
+                                <s-choice value="percentage" selected={referral.referred.discountType === "percentage"}>Percentage off</s-choice>
+                            </s-choice-list>
+                            <s-box paddingBlockEnd="base" />
+                            <s-number-field
+                                label="Discount Value"
+                                prefix={referral.referred.discountType === "fixed" ? "$" : ""}
+                                suffix={referral.referred.discountType === "percentage" ? "%" : ""}
+                                step={1}
+                                min={0}
+                                value={referral.referred.discountValue ?? ""}
+                                disabled={isBusy}
+                                onInput={(e) => formState.set("referral.referred.discountValue", e.target.value ? Number(e.target.value) : 0)}
+                            />
+                            {formState.errorFor("referral.referred.discountValue") && (
+                                <s-text tone="critical">{formState.errorFor("referral.referred.discountValue")}</s-text>
+                            )}
+                        </s-section>
+
+                        <s-box paddingBlockEnd="base" />
+
+                        {/* P1 — global points fallback */}
+                        <s-section>
+                            <s-heading>Points to Award</s-heading>
+                            <s-text tone="subdued">Default amounts — overridden by groups or intervals below.</s-text>
+                            <s-box paddingBlockEnd="base" />
+                            <PointsFields
+                                referrerVal={referral.referrer}
+                                referredVal={referral.referred}
+                                onReferrer={(field, value) => formState.set(`referral.referrer.${field}`, value)}
+                                onReferred={(field, value) => formState.set(`referral.referred.${field}`, value)}
+                                showRenewal={isSubscription}
+                                showRenewalToggle={isSubscription}
+                                tooltipPrefix="global"
+                                busy={isBusy}
+                            />
+                            {formState.errorFor("referral.referrer.points") && (
+                                <s-text tone="critical">{formState.errorFor("referral.referrer.points")}</s-text>
+                            )}
+                            {formState.errorFor("referral.referred.points") && (
+                                <s-text tone="critical">{formState.errorFor("referral.referred.points")}</s-text>
+                            )}
+                        </s-section>
+
+                        <s-box paddingBlockEnd="base" />
+
+                        {/* P2 — global interval overrides */}
+                        {isGlobalValid && isSubscription && (
+                            <s-section>
+                                <s-grid gridTemplateColumns="1fr auto" gap="base" alignItems="start">
+                                    <div>
+                                        <s-heading>Reward by Subscription Frequency</s-heading>
+                                        <s-box paddingBlockEnd="small" />
+                                        <s-text tone="subdued">
+                                            Custom points per billing frequency — applies to products not in any group.
+                                        </s-text>
+                                    </div>
+                                    <s-button variant="primary" disabled={isBusy} onClick={referralHandlers.intervals.add}>
+                                        + Add Interval
+                                    </s-button>
+                                </s-grid>
+                                {(referral.intervals ?? []).map((interval, intervalIndex) => (
+                                    <IntervalCard
+                                        key={intervalIndex}
+                                        iv={interval}
+                                        idx={intervalIndex}
+                                        isSubscription={isSubscription}
+                                        busy={isBusy}
+                                        usedIntervals={usedGlobalIntervalValues}
+                                        onRemove={referralHandlers.intervals.remove}
+                                        onInterval={referralHandlers.intervals.updateValue}
+                                        onReferrer={referralHandlers.intervals.updateReferrer}
+                                        onReferred={referralHandlers.intervals.updateReferred}
+                                    />
+                                ))}
+                            </s-section>
+                        )}
+
+                        {isGlobalValid && <s-box paddingBlockEnd="base" />}
+
+                        {/* P3 + P4 — product groups */}
+                        {isGlobalValid && (
+                            <s-section>
+                                <s-grid gridTemplateColumns="1fr auto" gap="base" alignItems="start">
+                                    <div>
+                                        <s-heading>Product Groups</s-heading>
+                                        <s-box paddingBlockEnd="small" />
+                                        <s-text tone="subdued">
+                                            Custom points for specific products — overrides defaults above.
+                                        </s-text>
+                                    </div>
+                                    <s-button variant="primary" disabled={isBusy} onClick={referralHandlers.groups.add}>
+                                        + Add Group
+                                    </s-button>
+                                </s-grid>
+                                {(referral.groups ?? []).map((group, groupIndex) => (
+                                    <GroupCard
+                                        key={group.id}
+                                        group={group}
+                                        groupIndex={groupIndex}
+                                        isSubscription={isSubscription}
+                                        busy={isBusy}
+                                        handlers={referralHandlers.groups}
+                                    />
+                                ))}
+                            </s-section>
+                        )}
+
+                        <s-box paddingBlockEnd="base" />
+                        <DescriptionField
+                            value={formState.form.description}
+                            onChange={(value) => formState.set("description", value)}
+                            busy={isBusy}
+                        />
+                    </s-box>
+
+                    {/* Right column */}
+                    <s-box>
+                        <SummaryPanel
+                            event={event}
+                            referral={referral}
+                            isSubscription={isSubscription}
+                            isActive={formState.form.isActive}
+                            onActiveChange={(value) => formState.set("isActive", value)}
+                            busy={isBusy}
+                        />
+                    </s-box>
+                </s-grid>
+
+                {formState.isDirty && <><s-box paddingBlock="large" /><s-box paddingBlock="large" /></>}
+            </s-page>
+
+            <SaveBar
+                visible={mode === "create" || formState.isDirty}
+                position="bottom-center"
+                message={mode === "edit" ? "You have unsaved changes" : "Ready to save your new rule"}
+                primaryLabel={mode === "edit" ? "Update Rule" : "Save Rule"}
+                secondaryLabel={mode === "edit" ? "Discard Changes" : "Cancel"}
+                onPrimary={formState.submit}
+                onSecondary={() => mode === "edit" ? formState.reset() : navigate("/app/points-rules")}
+                loading={isBusy}
+                disabled={isBusy}
+            />
+        </>
+    );
+}

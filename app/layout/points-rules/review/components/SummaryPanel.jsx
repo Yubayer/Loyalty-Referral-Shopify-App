@@ -1,0 +1,55 @@
+import { REVIEW_TYPES, REWARD_MODES } from "../_data";
+import { ActiveToggle } from "@shared-utils/rule-components/ActiveToggle";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SummaryPanel
+//
+// Right-column summary card for the review rule page.
+//
+// Props:
+//   event          {object}
+//   review         {object}  - fs.form.review
+//   isActive       {boolean}
+//   onActiveChange {Function}
+//   busy           {boolean}
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function SummaryPanel({ event, review, isActive, onActiveChange, busy }) {
+    return (
+        <>
+            <s-section>
+                <s-heading>Summary</s-heading>
+                <s-box paddingBlockEnd="small" />
+
+                <s-text><strong>Event:</strong> {event?.name ?? "Review"}</s-text>
+                <s-box paddingBlockEnd="small" />
+
+                {REVIEW_TYPES.map(({ key, label }) => (
+                    <s-box key={key} paddingBlockEnd="small">
+                        <s-text>
+                            <strong>{label}:</strong>{" "}
+                            {review[key].isActive
+                                ? `${review[key].points || 0} pts`
+                                : <s-text tone="subdued">Disabled</s-text>
+                            }
+                        </s-text>
+                    </s-box>
+                ))}
+
+                <s-box paddingBlockEnd="small" />
+                <s-text>
+                    <strong>Reward Mode:</strong>{" "}
+                    {REWARD_MODES.find((m) => m.value === review.rewardMode)?.label ?? review.rewardMode}
+                </s-text>
+                <s-box paddingBlockEnd="small" />
+                <s-text>
+                    <strong>Status:</strong>{" "}
+                    {isActive ? "Active ✅" : "Inactive ❌"}
+                </s-text>
+            </s-section>
+
+            <s-box paddingBlockEnd="base" />
+            <ActiveToggle checked={isActive} onChange={onActiveChange} busy={busy} />
+        </>
+    );
+}

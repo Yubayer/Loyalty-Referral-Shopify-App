@@ -1,0 +1,1 @@
+import{w as t,c as e,u as a,j as r,O as n,d as u}from"./chunk-UVKPFVEO-Bm2Giuur.js";import{A as p,b as d}from"./AppNav-ChvwWWVh.js";import{A as i}from"./AppProxyProvider-Dg2rUN0h.js";const f=t(function(){const{apiKey:s}=a();return r.jsxs(i,{embedded:!0,apiKey:s,children:[r.jsx(p,{}),r.jsx(n,{})]})}),j=e(function(){return d.error(u())});export{j as ErrorBoundary,f as default};

@@ -1,0 +1,5 @@
+npx terser public/widget/ui.v2.js -o public/widget/ui.v2.min.js --compress --mangle && npx clean-css-cli public/widget/ui.v2.css -o public/widget/ui.v2.min.css
+
+
+
+npx terser public/widget/ui.v2.js -o extensions/theme-extension/assets/ui.min.js --compress passes=2 --mangle --ecma 2018 --safari10 && npx clean-css-cli public/widget/ui.v2.css -o extensions/theme-extension/assets/ui.min.css

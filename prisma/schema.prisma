@@ -1,0 +1,436 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Session {
+  id                  String    @id
+  shop                String    @unique
+  state               String
+  isOnline            Boolean   @default(false)
+  scope               String?
+  expires             DateTime?
+  accessToken         String
+  userId              BigInt?
+  firstName           String?
+  lastName            String?
+  email               String?
+  accountOwner        Boolean   @default(false)
+  locale              String?
+  collaborator        Boolean?  @default(false)
+  emailVerified       Boolean?  @default(false)
+  refreshToken        String?
+  refreshTokenExpires DateTime?
+
+  customers      Customer[]
+  pointRules     PointsRule[]
+  rewardRules    RewardRule[]
+  events         Event[]
+  styles         Style?
+  appSettings    AppSettings?
+  physicalPrizes PhysicalPrize[]
+
+  @@index([shop])
+}
+
+model Customer {
+  id             Int       @id @default(autoincrement())
+  shopifyId      String    @unique
+  name           String?
+  firstName      String?
+  lastName       String?
+  email          String
+  points         Int       @default(0)
+  orders         Int       @default(0)
+  lifetimePoints Int       @default(0)
+  referralCode   String    @unique
+  birthday       DateTime?
+  isBlocked      Boolean   @default(false)
+  activeStatus   String    @default("ACTIVE")
+  metadata       Json?
+  createdAt      DateTime  @default(now())
+  enrolledAt     DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  transactions  Transaction[]
+  referralsSent Referral[]           @relation("Referrer")
+  referralsUsed Referral?            @relation("Referred")
+  rewards       Reward[]
+  prizeClaims   PhysicalPrizeClaim[]
+
+  session   Session @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  sessionId String
+
+  @@unique([sessionId, email])
+  @@index([sessionId])
+  @@index([referralCode])
+  @@index([activeStatus])
+  @@index([sessionId, enrolledAt(sort: Desc)])
+  @@index([sessionId, points(sort: Desc)])
+  @@index([sessionId, name])
+  @@index([sessionId, email])
+}
+
+model Event {
+  id          Int      @id @default(autoincrement())
+  shop        String
+  type        String
+  name        String?
+  description String?  @db.Text
+  metadata    Json?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  session   Session? @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId String?
+
+  pointsRule   PointsRule?
+  transactions Transaction[]
+
+  @@unique([sessionId, type])
+  @@unique([shop, type])
+  @@index([shop])
+  @@index([type])
+  @@index([isActive])
+}
+
+model PointsRule {
+  id             Int       @id @default(autoincrement())
+  name           String?
+  description    String?   @db.Text
+  pointsType     String    @default("FIXED")
+  pointsValue    Float     @default(0)
+  maxPoints      Int?
+  priority       Int       @default(0)
+  startDate      DateTime?
+  endDate        DateTime?
+  minOrderAmount Float?
+  maxUsesPerUser Int?
+  conditions     Json?
+  isActive       Boolean   @default(true)
+  metadata       Json?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  session   Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId String
+
+  event   Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  eventId Int   @unique
+
+  transactions Transaction[]
+
+  @@index([sessionId])
+  @@index([isActive])
+  @@index([priority])
+}
+
+model RewardRule {
+  id             Int       @id @default(autoincrement())
+  title          String
+  description    String?
+  pointsCost     Int
+  discountType   String
+  rewardType     String
+  rewardValue    Float?
+  couponPrefix   String?
+  usageLimit     Int?
+  usagePerUser   Int?
+  usageCount     Int       @default(0)
+  isAutoApply    Boolean   @default(false)
+  startDate      DateTime?
+  endDate        DateTime?
+  priority       Int       @default(0)
+  minOrderAmount Float?
+  conditions     Json?
+  isActive       Boolean   @default(true)
+  metadata       Json?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId String
+  rewards   Reward[]
+
+  @@index([sessionId])
+  @@index([isActive])
+  @@index([priority])
+}
+
+model Transaction {
+  id           Int       @id @default(autoincrement())
+  customerId   Int
+  type         String
+  points       Int
+  balanceAfter Int
+  eventId      Int?
+  expiresAt    DateTime?
+  reason       String?   @db.Text
+  metadata     Json?
+  createdAt    DateTime  @default(now())
+  status       String    @default("APPROVED")
+  activity     String?
+
+  // When this transaction's toast notification was shown/acknowledged to
+  // the customer on the storefront. null = not yet shown. Set by
+  // POST /apps/widget/notifications/mark-seen.
+  notifiedAt   DateTime?
+
+  customer     Customer    @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  event        Event?      @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  pointsRule   PointsRule? @relation(fields: [pointsRuleId], references: [id], onDelete: SetNull)
+  pointsRuleId Int?
+  reward       Reward?     @relation(fields: [rewardId], references: [id], onDelete: SetNull)
+  rewardId     Int?
+  referral     Referral?   @relation(fields: [referralId], references: [id], onDelete: SetNull)
+  referralId   Int?
+
+  physicalPrizeClaim PhysicalPrizeClaim? // opposite side of PhysicalPrizeClaim.transaction
+
+  @@index([customerId])
+  @@index([customerId, createdAt])
+  @@index([customerId, type])
+  @@index([customerId, notifiedAt])
+  @@index([eventId])
+  @@index([rewardId])
+  @@index([referralId])
+  @@index([expiresAt])
+  @@index([status])
+}
+
+model Referral {
+  id                     Int      @id @default(autoincrement())
+  referrerId             Int
+  referredId             Int
+  orderId                String?
+  status                 String?  @default("PENDING")
+  discountCode           String?
+  discountInfo           String?  @db.Text
+  discountUsed           Boolean  @default(false)
+  rewardGiven            Boolean  @default(false)
+  metadata               Json?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+  subscriptionContractId String?
+
+  referrer     Customer      @relation("Referrer", fields: [referrerId], references: [id], onDelete: Cascade)
+  referred     Customer      @relation("Referred", fields: [referredId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+
+  @@unique([referredId])
+  @@index([referrerId])
+  @@index([status])
+  @@index([discountCode])
+  @@index([subscriptionContractId])
+}
+
+model Reward {
+  id           Int       @id @default(autoincrement())
+  title        String?
+  event        String?
+  type         String?   @default("DEFAULT")
+  code         String?
+  rewardKey    String?   @unique
+  orderId      String?
+  pointsCost   Int?
+  status       String?   @default("PENDING")
+  discountUsed Boolean   @default(false)
+  usedAt       DateTime?
+  expiresAt    DateTime?
+  metadata     Json?
+  description  String?   @db.Text
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  rewardRule   RewardRule? @relation(fields: [rewardRuleId], references: [id], onDelete: SetNull)
+  rewardRuleId Int?
+
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  customerId Int
+
+  transactions Transaction[]
+
+  @@index([customerId])
+  @@index([rewardRuleId])
+  @@index([status])
+  @@index([expiresAt])
+  @@index([code])
+}
+
+model WebhookEvent {
+  id        String   @id @default(cuid())
+  shop      String
+  eventKey  String   @unique
+  topic     String?
+  status    String   @default("PROCESSED")
+  error     String?  @db.Text
+  createdAt DateTime @default(now())
+
+  @@index([shop])
+  @@index([createdAt])
+}
+
+model AppSettings {
+  id        Int      @id @default(autoincrement())
+  shop      String
+  settings  Json
+  updatedAt DateTime @updatedAt
+  sessionId String
+  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId])
+  @@unique([shop])
+}
+
+model Style {
+  id              Int      @id @default(autoincrement())
+  shop            String
+  actionButton    Json?
+  header          Json?
+  tabHome         Json?
+  tabRewards      Json?
+  tabActivity     Json?
+  tabProfile      Json?
+  tabReferral     Json?
+  tabEarnPoints   Json?
+  accountActivity Json?
+  cssVars         Json?
+  presetKey       String?
+  widgetConfig    Json?
+  updatedAt       DateTime @updatedAt
+  sessionId       String
+  session         Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId])
+  @@unique([shop])
+}
+
+model PhysicalPrize {
+  id           Int      @id @default(autoincrement())
+  title        String
+  description  String?
+  imageUrl     String?
+  pointsCost   Int
+  productValue Float?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  session   Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId String
+
+  claims PhysicalPrizeClaim[]
+
+  @@index([sessionId])
+  @@index([isActive])
+}
+
+model PhysicalPrizeClaim {
+  id          Int       @id @default(autoincrement())
+  status      String    @default("PENDING") // "PENDING" | "FULFILLED" | "COMPLETED" | "CANCELLED"
+  pointsCost  Int
+  createdAt   DateTime  @default(now())
+  fulfilledAt DateTime?
+  completedAt DateTime?
+
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  customerId Int
+
+  prize           PhysicalPrize @relation(fields: [physicalPrizeId], references: [id], onDelete: Cascade)
+  physicalPrizeId Int
+
+  transaction   Transaction? @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+  transactionId Int?         @unique
+
+  isSeenByAdmin Boolean   @default(false)
+  viewedByAdmin Boolean   @default(false)
+  viewedAt      DateTime?
+
+  adminNote    String? @db.Text
+  trackingInfo String? @db.Text // (license key, download link etc.)
+
+  @@index([customerId])
+  @@index([physicalPrizeId])
+  @@index([status])
+}
+
+model JobLock {
+  id        Int      @id @default(autoincrement())
+  jobName   String   @unique
+  isRunning Boolean  @default(false)
+  updatedAt DateTime @updatedAt
+}
+
+model Job {
+  id Int @id @default(autoincrement())
+
+  // ── Job identity ──────────────────────────────────────
+  // type: "ORDER_PAID" | "METAFIELD_SYNC" | "REFERRAL_EXPIRE"
+  type String
+
+  // status: "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED" | "CANCELLED"
+  // PENDING    — waiting in queue, not yet picked up
+  // PROCESSING — currently being executed by the poller
+  // COMPLETED  — finished successfully
+  // FAILED     — exhausted all attempts, no further retries
+  // CANCELLED  — manually cancelled
+  status String @default("PENDING")
+
+  // ── Shop context ──────────────────────────────────────
+  shop String
+
+  // ── Payload ───────────────────────────────────────────
+  // Structure varies by job type:
+  //   ORDER_PAID      → { shop, orderId, customerId, webhookId }
+  //   METAFIELD_SYNC  → { shop, customerId }
+  //   REFERRAL_EXPIRE → { shop, referralId }
+  payload Json
+
+  // ── Idempotency ───────────────────────────────────────
+  // Set to Shopify webhookId or a deterministic key e.g. "ORDER_PAID:{orderId}".
+  // The @unique constraint prevents duplicate jobs from being inserted.
+  idempotencyKey String? @unique
+
+  // ── Retry tracking ────────────────────────────────────
+  attempts    Int @default(0)
+  maxAttempts Int @default(3)
+
+  // How many times the auto-retry maintenance job (jobAutoRetryJob) has
+  // revived this job after it reached FAILED — separate from `attempts`,
+  // which tracks normal in-cycle retries within a single processing pass.
+  // Capped by AUTO_RETRY_CAP in jobAutoRetryJob.js so a genuinely broken
+  // job doesn't get silently re-attempted forever.
+  autoRetryCount Int @default(0)
+
+  // ── Scheduling ────────────────────────────────────────
+  // Defaults to now() so the job is picked up immediately.
+  // Set a future DateTime to delay execution (e.g. for referral expiry).
+  runAt DateTime @default(now())
+
+  // ── Stale lock detection ──────────────────────────────
+  // Set to now() when the poller claims the job (status → PROCESSING).
+  // If the job is still PROCESSING after 5 minutes, it is considered stale
+  // (e.g. server crash mid-execution) and the poller will re-queue it.
+  lockedAt DateTime?
+
+  // ── Error tracking ────────────────────────────────────
+  lastError String?   @db.Text
+  failedAt  DateTime?
+
+  // ── Timestamps ────────────────────────────────────────
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  completedAt DateTime?
+
+  // Primary poller query: WHERE status = 'PENDING' AND runAt <= NOW()
+  @@index([status, runAt])
+  // Stale lock recovery: WHERE status = 'PROCESSING' AND lockedAt < NOW() - 5min
+  @@index([status, lockedAt])
+  @@index([shop])
+  @@index([type, status])
+}

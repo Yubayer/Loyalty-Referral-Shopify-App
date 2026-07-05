@@ -1,0 +1,327 @@
+import { useLoaderData, useActionData, useNavigate, redirect } from "react-router";
+import { authenticate } from "shopify-server";
+import prisma from "db-server";
+import syncAppConfig from "@controller/metafieldsSync/syncAppConfig";
+
+import { useRuleForm } from "@shared-utils/rule-utils/useRuleForm";
+import { useSubmitBusy } from "@shared-utils/rule-utils/useSubmitBusy";
+import { useToastRedirect } from "@shared-utils/rule-utils/useToastRedirect";
+import { PageHeader } from "@shared-utils/rule-components/PageHeader";
+import { ProductList } from "@shared-utils/rule-components/ProductList";
+import { DescriptionField } from "@shared-utils/rule-components/DescriptionField";
+import { SaveBar } from "@app/components/saveBar/SaveBar";
+
+import { buildConditions, buildFormShape, validate } from "./_data";
+import { useOrderHandlers } from "./_hooks";
+import { EarningFields } from "./components/EarningFields";
+import { IntervalCard } from "./components/IntervalCard";
+import { GroupCard } from "./components/GroupCard";
+import { SummaryPanel } from "./components/SummaryPanel";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LOADER
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const loader = async ({ request }) => {
+    const { session } = await authenticate.admin(request);
+    const ruleId = new URL(request.url).searchParams.get("ruleId");
+
+    const event = await prisma.event.findFirst({
+        where: { sessionId: session.id, type: "ORDER", isActive: true },
+    });
+    if (!event) return redirect("/app/points-rules");
+
+    if (ruleId) {
+        const rule = await prisma.pointsRule.findUnique({
+            where: { id: parseInt(ruleId) },
+            include: { event: true },
+        });
+        if (!rule || rule.sessionId !== session.id) return redirect("/app/points-rules");
+        return { rule, event, mode: "edit" };
+    }
+
+    return { rule: null, event, mode: "create" };
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ACTION
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const action = async ({ request }) => {
+    const { session, admin } = await authenticate.admin(request);
+    const formData = await request.formData();
+    const submitType = formData.get("submitType");
+    const payload = JSON.parse(formData.get("payload") || "{}");
+
+    if (submitType === "createRule") {
+        try {
+            const event = await prisma.event.findFirst({
+                where: { sessionId: session.id, type: "ORDER", isActive: true },
+            });
+            if (!event) return { message: "ORDER event not found.", status: "error", submitType };
+
+            const existing = await prisma.pointsRule.findFirst({
+                where: { eventId: event.id, sessionId: session.id },
+            });
+            if (existing) return { message: "A rule for this event already exists.", status: "error", submitType };
+
+            const created = await prisma.pointsRule.create({
+                data: {
+                    name: payload.name || null,
+                    description: payload.description || null,
+                    isActive: payload.isActive ?? true,
+                    conditions: buildConditions(payload.order),
+                    session: { connect: { id: session.id } },
+                    event: { connect: { id: event.id } },
+                },
+            });
+            await syncAppConfig(admin, session);
+            return { message: "Points rule created successfully.", rule: created, status: "success", submitType };
+        } catch (error) {
+            console.error("Create ORDER Rule Error:", error);
+            return { message: "Failed to create rule. Please try again.", status: "error", submitType };
+        }
+    }
+
+    if (submitType === "updateRule") {
+        const ruleId = parseInt(formData.get("ruleId"));
+        if (!ruleId) return { message: "Rule ID is required.", status: "error", submitType };
+        try {
+            const existing = await prisma.pointsRule.findUnique({ where: { id: ruleId } });
+            if (!existing || existing.sessionId !== session.id)
+                return { message: "Rule not found or access denied.", status: "error", submitType };
+
+            const rule = await prisma.pointsRule.update({
+                where: { id: ruleId },
+                data: {
+                    name: payload.name || null,
+                    description: payload.description || null,
+                    isActive: payload.isActive ?? true,
+                    conditions: buildConditions(payload.order),
+                },
+            });
+            await syncAppConfig(admin, session);
+            return { message: "Points rule updated successfully.", rule, status: "success", submitType };
+        } catch (error) {
+            console.error("Update ORDER Rule Error:", error);
+            return { message: "Failed to update rule. Please try again.", status: "error", submitType };
+        }
+    }
+
+    return { message: "Invalid action.", status: "error", submitType };
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PAGE
+// ─────────────────────────────────────────────────────────────────────────────
+
+export default function OrderRulePage() {
+    const { rule, event, mode } = useLoaderData();
+    const actionData = useActionData();
+    const navigate = useNavigate();
+
+    const isBusy = useSubmitBusy();
+    const formState = useRuleForm(rule, buildFormShape, validate, "order", mode);
+    const orderHandlers = useOrderHandlers(formState);
+
+    useToastRedirect(actionData);
+
+    const order = formState.form.order;
+    const isSubscription = order.trigger === "subscription" || order.trigger === "both";
+    const isGlobalValid = order.type === "fixed"
+        ? Number(order.fixedPoints) > 0
+        : Number(order.rate?.points) > 0 && Number(order.rate?.amount) > 0;
+
+    const usedGlobalIntervalValues = new Set(
+        (order.intervals ?? []).map((interval) => interval.interval)
+    );
+
+    return (
+        <>
+            <s-page inlineSize="base">
+                <PageHeader
+                    title="Order Rule"
+                    mode={mode}
+                    isActive={formState.form.isActive}
+                    busy={isBusy}
+                />
+
+                <s-grid gridTemplateColumns="2fr 1fr" gap="base">
+                    <s-box>
+
+                        {/* Trigger */}
+                        <s-section>
+                            <s-heading>Order Trigger</s-heading>
+                            <s-text tone="subdued">Choose which type of orders will earn points.</s-text>
+                            <s-box paddingBlockEnd="small" />
+                            <s-choice-list
+                                name="orderTrigger"
+                                value={[order.trigger]}
+                                onInput={(e) => formState.set("order.trigger", e.currentTarget.values[0])}
+                            >
+                                <s-choice value="oneTime" selected={order.trigger === "oneTime"}>One-time purchase only</s-choice>
+                                <s-choice value="subscription" selected={order.trigger === "subscription"}>Subscription orders only</s-choice>
+                                <s-choice value="both" selected={order.trigger === "both"}>Both — all order types</s-choice>
+                            </s-choice-list>
+                        </s-section>
+
+                        <s-box paddingBlockEnd="base" />
+
+                        {/* Earning method */}
+                        <s-section>
+                            <s-heading>Earning Method</s-heading>
+                            <s-text tone="subdued">Reward based on spend, or a flat amount per order.</s-text>
+                            <s-box paddingBlockEnd="small" />
+                            <s-choice-list
+                                name="orderMethod"
+                                value={[order.type]}
+                                onInput={(e) => {
+                                    const selectedType = e.currentTarget.values[0];
+                                    formState.setMany([
+                                        ["order.type", selectedType],
+                                        ["order.rate", selectedType === "incremental" ? { amount: 10, points: 1 } : order.rate],
+                                        ["order.fixedPoints", selectedType === "fixed" ? 100 : order.fixedPoints],
+                                    ]);
+                                }}
+                            >
+                                <s-choice value="incremental" selected={order.type === "incremental"}>Incremental — points based on spend (Recommended)</s-choice>
+                                <s-choice value="fixed" selected={order.type === "fixed"}>Fixed — same points for every order</s-choice>
+                            </s-choice-list>
+                        </s-section>
+
+                        <s-box paddingBlockEnd="base" />
+
+                        {/* P1 — global earning fallback */}
+                        <s-section>
+                            <s-heading>Global Earning Points</s-heading>
+                            <s-text tone="subdued">Default rate — overridden by groups or intervals below.</s-text>
+                            <s-box paddingBlockEnd="small" />
+                            <EarningFields
+                                val={order}
+                                orderType={order.type}
+                                onChangeFixed={(value) => formState.set("order.fixedPoints", value)}
+                                onChangeRatePoints={(value) => formState.set("order.rate.points", value)}
+                                onChangeRateAmount={(value) => formState.set("order.rate.amount", value)}
+                                busy={isBusy}
+                            />
+                            {formState.errorFor("order.fixedPoints") && <s-text tone="critical">{formState.errorFor("order.fixedPoints")}</s-text>}
+                            {formState.errorFor("order.rate.points") && <s-text tone="critical">{formState.errorFor("order.rate.points")}</s-text>}
+                            {formState.errorFor("order.rate.amount") && <s-text tone="critical">{formState.errorFor("order.rate.amount")}</s-text>}
+                        </s-section>
+
+                        <s-box paddingBlockEnd="base" />
+
+                        {/* Excluded products */}
+                        <s-section>
+                            <s-heading>Excluded Products (Optional)</s-heading>
+                            <s-text tone="subdued">
+                                Products here never earn points — regardless of group or interval.
+                            </s-text>
+                            <s-box paddingBlockEnd="base" />
+                            <ProductList
+                                products={order.excludedProducts ?? []}
+                                onPick={orderHandlers.excludedProducts.openPicker}
+                                onRemove={orderHandlers.excludedProducts.remove}
+                                busy={isBusy}
+                                buttonLabel="Select Excluded Products"
+                            />
+                        </s-section>
+
+                        <s-box paddingBlockEnd="base" />
+
+                        {/* P2 — global interval overrides */}
+                        {isGlobalValid && isSubscription && (
+                            <s-section>
+                                <s-grid gridTemplateColumns="1fr auto" alignItems="center">
+                                    <div>
+                                        <s-heading>Subscription Interval Overrides</s-heading>
+                                        <s-text tone="subdued">
+                                            Custom rates per billing frequency — applies to products not in any group.
+                                        </s-text>
+                                    </div>
+                                    <s-button variant="primary" disabled={isBusy} onClick={orderHandlers.intervals.add}>
+                                        + Add Interval
+                                    </s-button>
+                                </s-grid>
+                                {(order.intervals ?? []).map((interval, intervalIndex) => (
+                                    <IntervalCard
+                                        key={intervalIndex}
+                                        iv={interval}
+                                        idx={intervalIndex}
+                                        orderType={order.type}
+                                        busy={isBusy}
+                                        usedIntervals={usedGlobalIntervalValues}
+                                        onRemove={orderHandlers.intervals.remove}
+                                        onInterval={orderHandlers.intervals.updateValue}
+                                        onField={orderHandlers.intervals.updateField}
+                                        onRateField={orderHandlers.intervals.updateRate}
+                                    />
+                                ))}
+                            </s-section>
+                        )}
+
+                        <s-box paddingBlockEnd="base" />
+
+                        {/* P3 + P4 — product groups */}
+                        {isGlobalValid && (
+                            <s-section>
+                                <s-grid gridTemplateColumns="1fr auto" alignItems="center">
+                                    <div>
+                                        <s-heading>Product Groups</s-heading>
+                                        <s-text tone="subdued">
+                                            Custom rates for specific products — overrides global and interval rates.
+                                        </s-text>
+                                    </div>
+                                    <s-button variant="primary" disabled={isBusy} onClick={orderHandlers.groups.add}>
+                                        + Add Group
+                                    </s-button>
+                                </s-grid>
+                                {(order.groups ?? []).map((group, groupIndex) => (
+                                    <GroupCard
+                                        key={group.id}
+                                        group={group}
+                                        groupIndex={groupIndex}
+                                        orderType={order.type}
+                                        isSubscription={isSubscription}
+                                        busy={isBusy}
+                                        handlers={orderHandlers.groups}
+                                    />
+                                ))}
+                            </s-section>
+                        )}
+
+                        <s-box paddingBlockEnd="base" />
+                        <DescriptionField
+                            value={formState.form.description}
+                            onChange={(value) => formState.set("description", value)}
+                            busy={isBusy}
+                        />
+                    </s-box>
+
+                    {/* Right column */}
+                    <s-box>
+                        <SummaryPanel
+                            event={event}
+                            order={order}
+                            isActive={formState.form.isActive}
+                            onActiveChange={(value) => formState.set("isActive", value)}
+                            busy={isBusy}
+                        />
+                    </s-box>
+                </s-grid>
+            </s-page>
+
+            <SaveBar
+                visible={mode === "create" || formState.isDirty}
+                position="bottom-center"
+                message={mode === "edit" ? "You have unsaved changes" : "Ready to save your new rule"}
+                primaryLabel={mode === "edit" ? "Update Rule" : "Save Rule"}
+                secondaryLabel={mode === "edit" ? "Discard Changes" : "Cancel"}
+                onPrimary={formState.submit}
+                onSecondary={() => mode === "edit" ? formState.reset() : navigate("/app/points-rules")}
+                loading={isBusy}
+                disabled={isBusy}
+            />
+        </>
+    );
+}

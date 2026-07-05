@@ -1,0 +1,1 @@
+import{w as n,j as e}from"./chunk-UVKPFVEO-Bm2Giuur.js";const r=n(function(){return e.jsx("s-page",{heading:"Dashboard",children:e.jsx("s-section",{children:"Under development"})})});export{r as default};

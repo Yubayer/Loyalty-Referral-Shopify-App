@@ -1,0 +1,76 @@
+{
+  "include": [
+    "env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".react-router/types/**/*"
+  ],
+  "compilerOptions": {
+    "lib": [
+      "DOM",
+      "DOM.Iterable",
+      "ES2022"
+    ],
+    "strict": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "allowSyntheticDefaultImports": true,
+    "removeComments": false,
+    "forceConsistentCasingInFileNames": true,
+    "noEmit": true,
+    "allowJs": true,
+    "resolveJsonModule": true,
+    "jsx": "react-jsx",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "target": "ES2022",
+    "baseUrl": ".",
+    "types": [
+      "@react-router/node",
+      "vite/client",
+      "@shopify/polaris-types"
+    ],
+    "rootDirs": [
+      ".",
+      "./.react-router/types"
+    ],
+    "paths": {
+      "shopify-server": [
+        "./app/shopify.server"
+      ],
+      "db-server": [
+        "./app/db.server"
+      ],
+      "app/*": [
+        "./app/*"
+      ],
+      "@app/*": [
+        "./app/*"
+      ],
+      "@atoms/*": [
+        "./app/atoms/*"
+      ],
+      "@components/*": [
+        "./app/components/*"
+      ],
+      "@controller/*": [
+        "./app/controller/*"
+      ],
+      "@graphql/*": [
+        "./app/graphql/*"
+      ],
+      "@routes/*": [
+        "./app/routes/*"
+      ],
+      "db-server.js": [
+        "./app/db.server.js"
+      ],
+      "@utils/*": [
+        "./app/utils/*"
+      ],
+      "@shared-utils/*": [
+        "./app/layout/points-rules/shared-utils"
+      ]
+    }
+  }
+}

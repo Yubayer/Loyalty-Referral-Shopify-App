@@ -1,0 +1,62 @@
+{% liquid
+  assign nbl_config = shop.metafields.app.nbl_config_v1.value
+  assign btn_pos = nbl_config.styles.actionButton['Button Position'] | downcase | default: 'left'
+  if btn_pos != 'right'
+    assign btn_pos = 'left'
+  endif
+%}
+
+<script>
+  window.NBL_v1 = window.NBL_v1 || {};
+
+  NBL_v1.appConfig = {{ nbl_config | json }};
+
+  NBL_v1.customer = {
+    id:         {{ customer.id         | json }},
+    email:      {{ customer.email      | json }},
+    name:       {{ customer.name       | json }},
+    first_name: {{ customer.first_name | json }},
+    last_name:  {{ customer.last_name  | json }},
+    config:     {{ customer.metafields.app.nbl_customer_v1.value | json }}
+  };
+
+  if (NBL_v1.customer && NBL_v1.customer.config && NBL_v1.customer.config.points) {
+    NBL_v1.points = NBL_v1.customer.config.points || 0;
+  }
+
+  NBL_v1.routes = {
+    account_url:  {{ routes.account_url  | json }},
+    login_url:    {{ routes.login_url    | json }},
+    logout_url:   {{ routes.logout_url   | json }},
+    register_url: {{ routes.register_url | json }}
+  };
+
+  NBL_v1.liquidData = {
+    isLoggedIn:     {{ customer | json | default: 'null' }} !== null,
+    customerName:   {{ customer.name | json | default: '""' }},
+    shopUrl:        {{ shop.url | json }},
+    referralCode:   {{ customer.metafields.app.nbl_customer_v1.value.referralCode | json | default: '""' }},
+    headerLabel:    {{ nbl_config.styles.header.Heading.Label | json | default: '"Welcome, [name]"' }},
+    pointsLabel:    {{ nbl_config.styles.header.Points.Label  | json | default: '"[points] points"' }},
+    buttonPosition: {{ btn_pos | json }}
+  };
+
+  NBL_v1.tab      = NBL_v1.tab      || {};
+  NBL_v1.uiRender = NBL_v1.uiRender || {};
+
+  // App Proxy path for live/fresh data (e.g. re-checking points after an
+  // action). shopify.app.toml: [app_proxy] prefix="apps" subpath="widget".
+  NBL_v1.proxyPath = "/apps/widget";
+</script>
+
+<link rel="preload" href="{{ 'ui.min.css' | asset_url }}" as="style">
+{{ 'ui.min.css' | asset_url | stylesheet_tag }}
+<script src="{{ 'ui.min.js' | asset_url }}" defer></script>
+
+{% schema %}
+{
+  "name": "NB Loyalty",
+  "target": "body",
+  "settings": []
+}
+{% endschema %}
